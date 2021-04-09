@@ -147,6 +147,27 @@ function inboundemailactivity_civicrm_pre($op, $objectName, $id, &$params) {
   if ($objectName === 'Activity' && $op === 'create' && $params['activity_type_id'] === CRM_Core_PseudoConstant::getKey('CRM_Activity_BAO_Activity', 'activity_type_id', 'Inbound Email')) {
     // Take the first target contact originally set in deprecated_activity_buildmailparams which would have been the to line.
     $params['target_contact_id'] = [$params['source_contact_id']];
+    // fetch the inbound email-to-activity email address contact, if no contact found then create one and use it for 'Added by' or source_contact_id 
+    // if not found ignore and let the source contact be the From contact
+    $emailToActivityContact = civicrm_api3('MailSettings', 'get', [
+      'sequential' => 1,
+      'is_default' => 0,
+      'api.Email.get' => ['email' => "\$value.username", 'is_primary' => 1, 'sequential' => 1],
+    ]);
+    // if inbound email-to-activity email address found
+    if (!empty($emailToActivityContact['values'])) {
+      // if contact associated with inbound email-to-activity email address found
+      if (!empty($emailToActivityContact['values'][0]['api.Email.get']['values'])) {
+        $params['source_contact_id'] = $emailToActivityContact['values'][0]['api.Email.get']['values'][0]['contact_id'];
+      }
+      // if contact associated with inbound email-to-activity email address not found then create one
+      else {
+        $params['source_contact_id'] = civicrm_api3('Contact', 'create', [
+          'contact_type' => "Individual",
+          'email' => $emailToActivityContact['values']['username'],
+        ])['id'];
+      }
+    }
     unset($params['assignee_contact_id']);
   }
 }
